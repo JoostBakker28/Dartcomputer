@@ -1,6 +1,13 @@
 import type { KeyboardEvent } from "react";
 
-import { DARTS_PER_TURN, type Player } from "./darts";
+import {
+  DARTS_PER_TURN,
+  MAX_CHECKOUT,
+  canCheckout,
+  remainingScore,
+  turnTotal,
+  type Player,
+} from "./darts";
 
 type PlayerPanelProps = {
   player: Player;
@@ -12,7 +19,9 @@ type PlayerPanelProps = {
     dartIndex: number,
     event: KeyboardEvent<HTMLInputElement>,
   ) => void;
+  onDoubleChange: (isDouble: boolean) => void;
   onSubmitTurn: () => void;
+  onNoScore: () => void;
   registerDartRef: (
     dartIndex: number,
     element: HTMLInputElement | null,
@@ -26,9 +35,13 @@ export default function PlayerPanel({
   onNameChange,
   onDartChange,
   onDartKeyDown,
+  onDoubleChange,
   onSubmitTurn,
+  onNoScore,
   registerDartRef,
 }: PlayerPanelProps) {
+  const checkoutAvailable = canCheckout(player);
+
   return (
     <section
       aria-label={player.name}
@@ -57,7 +70,7 @@ export default function PlayerPanel({
       </header>
 
       <p className="text-center font-mono text-6xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-        501
+        {remainingScore(player)}
       </p>
 
       <div className="grid grid-cols-3 gap-3">
@@ -84,14 +97,48 @@ export default function PlayerPanel({
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={onSubmitTurn}
-        disabled={!isActive || !canSubmit}
-        className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+      {/* Sits between the darts and the actions: the checkout applies to the
+          turn as a whole, which may be fewer than three darts. */}
+      <label
+        title={
+          checkoutAvailable
+            ? "Tick if the last dart thrown this turn was a double"
+            : `Available from ${MAX_CHECKOUT} or less`
+        }
+        className={`flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm font-medium transition-colors ${
+          isActive && checkoutAvailable
+            ? "cursor-pointer border-emerald-400 text-zinc-700 dark:text-zinc-200"
+            : "border-zinc-200 text-zinc-400 dark:border-zinc-800 dark:text-zinc-600"
+        }`}
       >
-        Submit turn
-      </button>
+        <input
+          type="checkbox"
+          checked={player.isDouble}
+          onChange={(event) => onDoubleChange(event.target.checked)}
+          disabled={!isActive || !checkoutAvailable}
+          className="size-4 accent-emerald-600 disabled:cursor-not-allowed"
+        />
+        Final dart double
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={onSubmitTurn}
+          disabled={!isActive || !canSubmit}
+          className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+        >
+          Submit turn
+        </button>
+        <button
+          type="button"
+          onClick={onNoScore}
+          disabled={!isActive}
+          className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:disabled:text-zinc-700"
+        >
+          No score
+        </button>
+      </div>
 
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -106,15 +153,28 @@ export default function PlayerPanel({
             {player.history.map((turn, turnIndex) => (
               <li
                 key={turnIndex}
-                className="flex items-center justify-between rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800/60"
+                className="flex items-center gap-3 rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800/60"
               >
-                <span className="text-zinc-500 dark:text-zinc-400">
+                <span className="w-14 shrink-0 text-zinc-500 dark:text-zinc-400">
                   Turn {turnIndex + 1}
                 </span>
-                <span className="font-mono tabular-nums text-zinc-900 dark:text-zinc-50">
+                <span className="flex-1 font-mono tabular-nums text-zinc-900 dark:text-zinc-50">
                   {Array.from({ length: DARTS_PER_TURN }, (_, dartIndex) =>
-                    turn[dartIndex] === "" ? "–" : turn[dartIndex],
+                    turn.darts[dartIndex] === "" ? "–" : turn.darts[dartIndex],
                   ).join("  ·  ")}
+                </span>
+                {turn.isDouble && (
+                  <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    D
+                  </span>
+                )}
+                {!turn.scored && (
+                  <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-xs font-medium text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300">
+                    No score
+                  </span>
+                )}
+                <span className="w-8 shrink-0 text-right font-mono font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                  {turnTotal(turn)}
                 </span>
               </li>
             ))}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
+  canCheckout,
   createPlayer,
   isDartComplete,
   sanitizeDartInput,
@@ -45,10 +46,15 @@ export default function Scoreboard() {
     const value = sanitizeDartInput(rawValue);
     if (value === null) return;
 
+    const player = players[playerIndex];
+    const darts = player.darts.map((dart, index) =>
+      index === dartIndex ? value : dart,
+    );
+
     updatePlayer(playerIndex, {
-      darts: players[playerIndex].darts.map((dart, index) =>
-        index === dartIndex ? value : dart,
-      ),
+      darts,
+      // Editing a dart can push the checkout back out of range.
+      isDouble: canCheckout({ ...player, darts }) ? player.isDouble : false,
     });
 
     if (isDartComplete(value) && dartIndex < DARTS_PER_TURN - 1) {
@@ -56,11 +62,16 @@ export default function Scoreboard() {
     }
   };
 
-  const submitTurn = (playerIndex: number) => {
+  /** Records the turn as thrown, or as a zero when `scored` is false. */
+  const submitTurn = (playerIndex: number, scored: boolean) => {
     const player = players[playerIndex];
     updatePlayer(playerIndex, {
       darts: Array<string>(DARTS_PER_TURN).fill(""),
-      history: [...player.history, player.darts],
+      isDouble: false,
+      history: [
+        ...player.history,
+        { darts: player.darts, isDouble: player.isDouble, scored },
+      ],
     });
     setActivePlayer((current) => (current === 0 ? 1 : 0));
   };
@@ -76,8 +87,8 @@ export default function Scoreboard() {
       event.preventDefault();
       if (dartIndex < DARTS_PER_TURN - 1) {
         focusDart(playerIndex, dartIndex + 1);
-      } else if (darts.every((dart) => dart !== "")) {
-        submitTurn(playerIndex);
+      } else if (darts.some((dart) => dart !== "")) {
+        submitTurn(playerIndex, true);
       }
       return;
     }
@@ -96,7 +107,7 @@ export default function Scoreboard() {
           key={playerIndex}
           player={player}
           isActive={playerIndex === activePlayer}
-          canSubmit={player.darts.every((dart) => dart !== "")}
+          canSubmit={player.darts.some((dart) => dart !== "")}
           onNameChange={(name) => updatePlayer(playerIndex, { name })}
           onDartChange={(dartIndex, value) =>
             handleDartChange(playerIndex, dartIndex, value)
@@ -104,7 +115,9 @@ export default function Scoreboard() {
           onDartKeyDown={(dartIndex, event) =>
             handleDartKeyDown(playerIndex, dartIndex, event)
           }
-          onSubmitTurn={() => submitTurn(playerIndex)}
+          onDoubleChange={(isDouble) => updatePlayer(playerIndex, { isDouble })}
+          onSubmitTurn={() => submitTurn(playerIndex, true)}
+          onNoScore={() => submitTurn(playerIndex, false)}
           registerDartRef={(dartIndex, element) => {
             dartRefs.current[playerIndex][dartIndex] = element;
           }}
