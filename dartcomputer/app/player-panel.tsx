@@ -7,7 +7,28 @@ import {
   remainingScore,
   turnTotal,
   type Player,
+  type TurnOutcome,
 } from "./darts";
+
+/** Badge shown next to a completed turn; a plain scoring turn gets none. */
+const OUTCOME_BADGES: Record<
+  TurnOutcome,
+  { label: string; className: string } | null
+> = {
+  scored: null,
+  checkout: {
+    label: "Checkout",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  },
+  bust: {
+    label: "Bust",
+    className: "bg-red-500/15 text-red-700 dark:text-red-400",
+  },
+  "no-score": {
+    label: "No score",
+    className: "bg-zinc-200 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300",
+  },
+};
 
 type PlayerPanelProps = {
   player: Player;
@@ -150,34 +171,41 @@ export default function PlayerPanel({
           </p>
         ) : (
           <ol className="flex flex-col gap-1">
-            {player.history.map((turn, turnIndex) => (
-              <li
-                key={turnIndex}
-                className="flex items-center gap-3 rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800/60"
-              >
-                <span className="w-14 shrink-0 text-zinc-500 dark:text-zinc-400">
-                  Turn {turnIndex + 1}
-                </span>
-                <span className="flex-1 font-mono tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {Array.from({ length: DARTS_PER_TURN }, (_, dartIndex) =>
-                    turn.darts[dartIndex] === "" ? "–" : turn.darts[dartIndex],
-                  ).join("  ·  ")}
-                </span>
-                {turn.isDouble && (
-                  <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    D
+            {player.history.map((turn, turnIndex) => {
+              const badge = OUTCOME_BADGES[turn.outcome];
+              return (
+                <li
+                  key={turnIndex}
+                  className="flex items-center gap-3 rounded-md bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800/60"
+                >
+                  <span className="w-14 shrink-0 text-zinc-500 dark:text-zinc-400">
+                    Turn {turnIndex + 1}
                   </span>
-                )}
-                {!turn.scored && (
-                  <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-xs font-medium text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300">
-                    No score
+                  <span className="flex-1 font-mono tabular-nums text-zinc-900 dark:text-zinc-50">
+                    {Array.from({ length: DARTS_PER_TURN }, (_, dartIndex) =>
+                      turn.darts[dartIndex] === ""
+                        ? "–"
+                        : turn.darts[dartIndex],
+                    ).join("  ·  ")}
                   </span>
-                )}
-                <span className="w-8 shrink-0 text-right font-mono font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {turnTotal(turn)}
-                </span>
-              </li>
-            ))}
+                  {turn.isDouble && (
+                    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                      D
+                    </span>
+                  )}
+                  {badge && (
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${badge.className}`}
+                    >
+                      {badge.label}
+                    </span>
+                  )}
+                  <span className="w-8 shrink-0 text-right font-mono font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                    {turnTotal(turn)}
+                  </span>
+                </li>
+              );
+            })}
           </ol>
         )}
       </div>
