@@ -4,26 +4,36 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
-  LEGS_PER_SET,
-  awardLeg,
-  bestOf,
+  MAXIMUM_SCORE,
   createPlayer,
+  dartsEntered,
   emptyDarts,
   findLegWinner,
-  findMatchWinner,
-  formatSummary,
   isDartComplete,
   sanitizeDartInput,
   startLeg,
   turnOutcome,
+  turnTotal,
+  type Player,
+  type Turn,
+  type TurnOutcome,
+} from "./darts";
+import {
+  LEGS_PER_SET,
+  awardLeg,
+  bestOf,
+  findMatchWinner,
+  formatSummary,
   winsNeeded,
   wonSet,
   type MatchSettings,
-  type Player,
-  type TurnOutcome,
-} from "./darts";
+} from "./match-rules";
+import MatchBanner from "./match-banner";
 import MatchStats from "./match-stats";
 import PlayerPanel from "./player-panel";
+
+/** Served from public/, so the browser fetches it straight from the root. */
+const MAXIMUM_SOUND = "/180.m4a";
 
 /** Everything an undo has to put back, captured before each turn is recorded. */
 type Snapshot = {
@@ -56,12 +66,25 @@ export default function Scoreboard({
   const [past, setPast] = useState<Snapshot[]>([]);
 
   const dartRefs = useRef<(HTMLInputElement | null)[][]>([[], []]);
+  const maximumSound = useRef<HTMLAudioElement | null>(null);
   const legWinner = findLegWinner(players);
   const matchWinner = findMatchWinner(players, settings);
   const playingSets = settings.format === "sets";
 
   const focusDart = (playerIndex: number, dartIndex: number) => {
     dartRefs.current[playerIndex]?.[dartIndex]?.focus();
+  };
+
+  useEffect(() => {
+    maximumSound.current = new Audio(MAXIMUM_SOUND);
+  }, []);
+
+  const callMaximum = () => {
+    const sound = maximumSound.current;
+    if (sound === null) return;
+
+    sound.currentTime = 0;
+    void sound.play().catch(() => {});
   };
 
   // Hand focus to the first dart of whoever is up next. The turn count is a
@@ -111,21 +134,23 @@ export default function Scoreboard({
   const submitTurn = (playerIndex: number, forcedOutcome?: TurnOutcome) => {
     const player = players[playerIndex];
     const outcome = forcedOutcome ?? turnOutcome(player);
-    // "No score" throws the turn away, so whatever was typed before it was
-    // pressed is not recorded against the turn either.
     const isNoScore = outcome === "no-score";
 
+    const turn: Turn = {
+      darts: isNoScore ? emptyDarts() : player.darts,
+      outcome,
+    };
     const recorded: Player = {
       ...player,
       darts: emptyDarts(),
-      history: [
-        ...player.history,
-        { darts: isNoScore ? emptyDarts() : player.darts, outcome },
-      ],
+      history: [...player.history, turn],
     };
     const next = players.map((current, index) =>
       index === playerIndex ? recorded : current,
     );
+
+    // A busted 180 scores nothing, so it does not get the call.
+    if (turnTotal(turn) === MAXIMUM_SCORE) callMaximum();
 
     rememberState();
 
@@ -200,7 +225,7 @@ export default function Scoreboard({
       player={players[playerIndex]}
       name={names[playerIndex]}
       isActive={playerIndex === activePlayer && legWinner === null}
-      canSubmit={players[playerIndex].darts.some((dart) => dart !== "")}
+      canSubmit={dartsEntered(players[playerIndex].darts) > 0}
       showSets={playingSets}
       onNameChange={(name) => onNameChange(playerIndex, name)}
       onDartChange={(dartIndex, value) =>
@@ -241,38 +266,25 @@ export default function Scoreboard({
         </button>
       </div>
 
-      {matchWinner !== null && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            {names[matchWinner]} won the match {matchScore}.
-          </p>
-          <button
-            type="button"
-            onClick={playAgain}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-          >
-            Play again
-          </button>
-        </div>
-      )}
-
-      {matchWinner !== null && <MatchStats names={names} players={players} />}
-
-      {matchWinner === null && legWinner !== null && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            {names[legWinner]} won the{" "}
-            {wonSet(players, legWinner, settings) ? "set" : "leg"}. Match stands
-            at {matchScore}.
-          </p>
-          <button
-            type="button"
-            onClick={startNextLeg}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-          >
-            Next leg
-          </button>
-        </div>
+      {matchWinner !== null ? (
+        <>
+          <MatchBanner
+            message={`${names[matchWinner]} won the match ${matchScore}.`}
+            actionLabel="Play again"
+            onAction={playAgain}
+          />
+          <MatchStats names={names} players={players} />
+        </>
+      ) : (
+        legWinner !== null && (
+          <MatchBanner
+            message={`${names[legWinner]} won the ${
+              wonSet(players, legWinner, settings) ? "set" : "leg"
+            }. Match stands at ${matchScore}.`}
+            actionLabel="Next leg"
+            onAction={startNextLeg}
+          />
+        )
       )}
 
       <div className="grid w-full gap-6 md:grid-cols-[1fr_auto_1fr]">

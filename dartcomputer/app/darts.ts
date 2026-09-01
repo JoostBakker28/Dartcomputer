@@ -1,7 +1,17 @@
+/**
+ * Scoring a leg of 501: what a dart can be worth, what a turn does to the
+ * score, and how a turn ends. Everything here is about a single leg; the
+ * match built out of legs lives in match-rules.ts.
+ */
+
 export const DARTS_PER_TURN = 3;
 export const MAX_DART_SCORE = 60;
-/** Scores that cannot be achieved with a single dart, so they are impossible to enter. */
-export const IMPOSSIBLE_SCORES = [59, 58, 56, 55, 53, 52, 49, 47, 46, 44, 43, 41, 37, 35, 31, 29, 23];
+/** Three treble twenties: the most that can be scored in one turn. */
+export const MAXIMUM_SCORE = DARTS_PER_TURN * MAX_DART_SCORE;
+/** Scores no single dart can make, so they are impossible to enter. */
+export const IMPOSSIBLE_SCORES = [
+  59, 58, 56, 55, 53, 52, 49, 47, 46, 44, 43, 41, 37, 35, 31, 29, 23,
+];
 export const STARTING_SCORE = 501;
 /** Highest score that can still be checked out: T20, T20, bullseye. */
 export const MAX_CHECKOUT = 170;
@@ -11,60 +21,6 @@ export const BOGEY_SCORES = [169, 168, 166, 165, 163, 162, 159];
 export const MAX_DOUBLE = 40;
 /** The inner bull, which counts as a double for checkout purposes. */
 export const BULLSEYE = 50;
-/** Longest match the setup screen offers when playing legs. */
-export const MAX_LEGS = 31;
-/** Longest match the setup screen offers when playing sets. */
-export const MAX_SETS = 13;
-/** Every set is played as a best of five legs, so three legs take one. */
-export const LEGS_PER_SET = 5;
-
-export type MatchFormat = "legs" | "sets";
-
-/**
- * The rules chosen on the setup screen. Both counts are kept so switching
- * format and back does not lose the length picked for the other one.
- */
-export type MatchSettings = {
-  format: MatchFormat;
-  /** Best-of leg count, used when playing legs. Always odd. */
-  legs: number;
-  /** Best-of set count, used when playing sets. Always odd. */
-  sets: number;
-};
-
-export const DEFAULT_SETTINGS: MatchSettings = {
-  format: "legs",
-  legs: 1,
-  sets: 5,
-};
-
-/** How many legs, or sets, the match is a best of, given the chosen format. */
-export function bestOf(settings: MatchSettings): number {
-  return settings.format === "sets" ? settings.sets : settings.legs;
-}
-
-/** The odd best-of counts up to a limit, which is what the dropdowns offer. */
-export function bestOfOptions(max: number): number[] {
-  const options: number[] = [];
-  for (let count = 1; count <= max; count += 2) options.push(count);
-  return options;
-}
-
-/** A best of five is taken by three: the majority of the count. */
-export function winsNeeded(count: number): number {
-  return Math.ceil(count / 2);
-}
-
-/** Short description of a match length, such as "Best of 5 sets". */
-export function bestOfLabel(count: number, format: MatchFormat): string {
-  const unit = format === "sets" ? "set" : "leg";
-  return `Best of ${count} ${unit}${count === 1 ? "" : "s"}`;
-}
-
-/** The same label for the rules as they are currently set. */
-export function formatSummary(settings: MatchSettings): string {
-  return bestOfLabel(bestOf(settings), settings.format);
-}
 
 export type TurnOutcome =
   /** A normal scoring turn. */
@@ -119,6 +75,11 @@ export function startLeg(player: Player): Player {
   };
 }
 
+/** How many of the three darts have a score in them. */
+export function dartsEntered(darts: string[]): number {
+  return darts.filter((dart) => dart !== "").length;
+}
+
 /** Strips anything that is not a digit and keeps the value within 0-60. */
 export function sanitizeDartInput(rawValue: string): string | null {
   const digits = rawValue.replace(/\D/g, "").slice(0, 2);
@@ -134,7 +95,10 @@ export function sanitizeDartInput(rawValue: string): string | null {
 export function isDartComplete(value: string): boolean {
   if (value === "") return false;
   return (
-    IMPOSSIBLE_SCORES.includes(Number(value)) || value.length === 2 || value === "0" || Number(`${value}0`) > MAX_DART_SCORE
+    value.length === 2 ||
+    value === "0" ||
+    IMPOSSIBLE_SCORES.includes(Number(value)) ||
+    Number(`${value}0`) > MAX_DART_SCORE
   );
 }
 
@@ -185,9 +149,7 @@ export function isCheckoutDouble(score: number): boolean {
  * the scores in that range that no combination can finish.
  */
 export function isCheckoutPossible(score: number): boolean {
-  return (
-    score >= 2 && score <= MAX_CHECKOUT && !BOGEY_SCORES.includes(score)
-  );
+  return score >= 2 && score <= MAX_CHECKOUT && !BOGEY_SCORES.includes(score);
 }
 
 /**
@@ -230,107 +192,4 @@ export function findLegWinner(players: Player[]): number | null {
     player.history.some((turn) => turn.outcome === "checkout"),
   );
   return index === -1 ? null : index;
-}
-
-/**
- * Credits a won leg and, when playing sets, rolls it up into a set as soon as
- * the winner has taken the majority of the legs in it.
- */
-export function awardLeg(
-  players: Player[],
-  winnerIndex: number,
-  settings: MatchSettings,
-): Player[] {
-  const credited = players.map((player, index) =>
-    index === winnerIndex ? { ...player, legs: player.legs + 1 } : player,
-  );
-
-  if (settings.format !== "sets") return credited;
-  if (credited[winnerIndex].legs < winsNeeded(LEGS_PER_SET)) return credited;
-
-  // The set is decided, so the leg score starts again for both players.
-  return credited.map((player, index) => ({
-    ...player,
-    legs: 0,
-    sets: index === winnerIndex ? player.sets + 1 : player.sets,
-  }));
-}
-
-/** Whether the leg just won also took a set, which the banner spells out. */
-export function wonSet(
-  players: Player[],
-  winnerIndex: number,
-  settings: MatchSettings,
-): boolean {
-  // Winning a leg always leaves one on the board unless a set cleared them.
-  return settings.format === "sets" && players[winnerIndex].legs === 0;
-}
-
-/** The player who has taken the whole match, if the format has been reached. */
-export function findMatchWinner(
-  players: Player[],
-  settings: MatchSettings,
-): number | null {
-  const target = winsNeeded(bestOf(settings));
-  const index = players.findIndex(
-    (player) => (settings.format === "sets" ? player.sets : player.legs) >= target,
-  );
-  return index === -1 ? null : index;
-}
-
-/** Darts thrown in a turn. A "no score" turn is taken as a full three. */
-export function dartsThrown(turn: Turn): number {
-  if (turn.outcome === "no-score") return DARTS_PER_TURN;
-  return turn.darts.filter((dart) => dart !== "").length;
-}
-
-/** Every leg of the match, the one on the board included. */
-export function matchLegs(player: Player): Turn[][] {
-  return [...player.legsPlayed, player.history];
-}
-
-export type PlayerStats = {
-  /** Points per three darts, or null before a single dart is thrown. */
-  average: number | null;
-  /** Most points put away in one turn. */
-  bestTurn: number;
-  turns: number;
-  /** Legs finished off. */
-  checkouts: number;
-  /** Turns started on a score a checkout was actually possible from. */
-  checkoutChances: number;
-};
-
-/**
- * Walks the match leg by leg, since a checkout chance depends on the score
- * left at the start of each turn.
- */
-export function playerStats(player: Player): PlayerStats {
-  const stats: PlayerStats = {
-    average: null,
-    bestTurn: 0,
-    turns: 0,
-    checkouts: 0,
-    checkoutChances: 0,
-  };
-  let points = 0;
-  let darts = 0;
-
-  for (const leg of matchLegs(player)) {
-    let remaining = STARTING_SCORE;
-    for (const turn of leg) {
-      const total = turnTotal(turn);
-
-      if (isCheckoutPossible(remaining)) stats.checkoutChances += 1;
-      if (turn.outcome === "checkout") stats.checkouts += 1;
-      stats.bestTurn = Math.max(stats.bestTurn, total);
-      stats.turns += 1;
-      points += total;
-      darts += dartsThrown(turn);
-      remaining -= total;
-    }
-  }
-
-  if (darts > 0) stats.average = (points / darts) * DARTS_PER_TURN;
-  return stats;
 }

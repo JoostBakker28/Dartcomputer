@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { DEFAULT_SETTINGS, type MatchSettings } from "./darts";
+import { DEFAULT_SETTINGS, type MatchSettings } from "./match-rules";
 import MatchSetup from "./match-setup";
 import Scoreboard from "./scoreboard";
 
