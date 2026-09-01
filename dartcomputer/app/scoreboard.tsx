@@ -7,7 +7,6 @@ import {
   LEGS_PER_SET,
   awardLeg,
   bestOf,
-  canCheckout,
   createPlayer,
   emptyDarts,
   findLegWinner,
@@ -93,16 +92,11 @@ export default function Scoreboard({
     const value = sanitizeDartInput(rawValue);
     if (value === null) return;
 
-    const player = players[playerIndex];
-    const darts = player.darts.map((dart, index) =>
+    const darts = players[playerIndex].darts.map((dart, index) =>
       index === dartIndex ? value : dart,
     );
 
-    updatePlayer(playerIndex, {
-      darts,
-      // Editing a dart can push the checkout back out of range.
-      isDouble: canCheckout({ ...player, darts }) ? player.isDouble : false,
-    });
+    updatePlayer(playerIndex, { darts });
 
     if (isDartComplete(value) && dartIndex < DARTS_PER_TURN - 1) {
       focusDart(playerIndex, dartIndex + 1);
@@ -123,14 +117,9 @@ export default function Scoreboard({
     const recorded: Player = {
       ...player,
       darts: emptyDarts(),
-      isDouble: false,
       history: [
         ...player.history,
-        {
-          darts: isNoScore ? emptyDarts() : player.darts,
-          isDouble: isNoScore ? false : player.isDouble,
-          outcome,
-        },
+        { darts: isNoScore ? emptyDarts() : player.darts, outcome },
       ],
     };
     const next = players.map((current, index) =>
@@ -219,7 +208,6 @@ export default function Scoreboard({
       onDartKeyDown={(dartIndex, event) =>
         handleDartKeyDown(playerIndex, dartIndex, event)
       }
-      onDoubleChange={(isDouble) => updatePlayer(playerIndex, { isDouble })}
       onSubmitTurn={() => submitTurn(playerIndex)}
       onNoScore={() => submitTurn(playerIndex, "no-score")}
       registerDartRef={(dartIndex, element) => {

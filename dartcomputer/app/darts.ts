@@ -3,8 +3,6 @@ export const MAX_DART_SCORE = 60;
 /** Scores that cannot be achieved with a single dart, so they are impossible to enter. */
 export const IMPOSSIBLE_SCORES = [59, 58, 56, 55, 53, 52, 49, 47, 46, 44, 43, 41, 37, 35, 31, 29, 23];
 export const STARTING_SCORE = 501;
-/** Highest score that can still be checked out: T20, T20, bullseye. */
-export const MAX_CHECKOUT = 170;
 /** Highest double on the board, D20. */
 export const MAX_DOUBLE = 40;
 /** The inner bull, which counts as a double for checkout purposes. */
@@ -76,16 +74,12 @@ export type TurnOutcome =
 
 export type Turn = {
   darts: string[];
-  /** Whether the final dart of the turn was a double, for checkout. */
-  isDouble: boolean;
   outcome: TurnOutcome;
 };
 
 export type Player = {
   /** Scores for the turn currently being entered, one string per dart. */
   darts: string[];
-  /** Double flag for the turn currently being entered. */
-  isDouble: boolean;
   /** Completed turns of the current leg, oldest first. */
   history: Turn[];
   /** Legs won: in the current set when playing sets, in the match otherwise. */
@@ -102,7 +96,6 @@ export function emptyDarts(): string[] {
 export function createPlayer(): Player {
   return {
     darts: emptyDarts(),
-    isDouble: false,
     history: [],
     legs: 0,
     sets: 0,
@@ -111,7 +104,7 @@ export function createPlayer(): Player {
 
 /** Clears the throwing state for the next leg, keeping the match score. */
 export function startLeg(player: Player): Player {
-  return { ...player, darts: emptyDarts(), isDouble: false, history: [] };
+  return { ...player, darts: emptyDarts(), history: [] };
 }
 
 /** Strips anything that is not a digit and keeps the value within 0-60. */
@@ -166,11 +159,6 @@ export function liveRemainingScore(player: Player): number {
   return remainingScore(player) - currentTurnTotal(player);
 }
 
-/** Whether this player is close enough to finish the leg on a double. */
-export function canCheckout(player: Player): boolean {
-  return liveRemainingScore(player) <= MAX_CHECKOUT;
-}
-
 /**
  * A leg must end on a double: any even score from 2 to 40 (D1-D20), or the
  * bullseye, which is scored as a double 25.
@@ -192,11 +180,11 @@ export function finalDartScore(darts: string[]): number | null {
 }
 
 /**
- * A checkout counts only when the turn lands exactly on zero, the player
- * confirmed the final dart was a double, and that dart really is one.
+ * A checkout counts when the turn lands exactly on zero and the final dart is
+ * a score that can be thrown as a double. Whether it really was one is left to
+ * the players.
  */
 export function isValidCheckout(player: Player): boolean {
-  if (!player.isDouble) return false;
   if (liveRemainingScore(player) !== 0) return false;
 
   const finalDart = finalDartScore(player.darts);
