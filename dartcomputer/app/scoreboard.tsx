@@ -22,6 +22,7 @@ import {
   type Player,
   type TurnOutcome,
 } from "./darts";
+import MatchStats from "./match-stats";
 import PlayerPanel from "./player-panel";
 
 /** Everything an undo has to put back, captured before each turn is recorded. */
@@ -254,6 +255,8 @@ export default function Scoreboard({
           </button>
         </div>
       )}
+
+      {matchWinner !== null && <MatchStats names={names} players={players} />}
 
       {matchWinner === null && legWinner !== null && (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">

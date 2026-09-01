@@ -3,6 +3,10 @@ export const MAX_DART_SCORE = 60;
 /** Scores that cannot be achieved with a single dart, so they are impossible to enter. */
 export const IMPOSSIBLE_SCORES = [59, 58, 56, 55, 53, 52, 49, 47, 46, 44, 43, 41, 37, 35, 31, 29, 23];
 export const STARTING_SCORE = 501;
+/** Highest score that can still be checked out: T20, T20, bullseye. */
+export const MAX_CHECKOUT = 170;
+/** Scores inside that range which still cannot be finished in three darts. */
+export const BOGEY_SCORES = [169, 168, 166, 165, 163, 162, 159];
 /** Highest double on the board, D20. */
 export const MAX_DOUBLE = 40;
 /** The inner bull, which counts as a double for checkout purposes. */
@@ -82,6 +86,8 @@ export type Player = {
   darts: string[];
   /** Completed turns of the current leg, oldest first. */
   history: Turn[];
+  /** Turns of the legs already finished, kept for the match statistics. */
+  legsPlayed: Turn[][];
   /** Legs won: in the current set when playing sets, in the match otherwise. */
   legs: number;
   /** Sets won; stays at zero when playing legs. */
@@ -97,6 +103,7 @@ export function createPlayer(): Player {
   return {
     darts: emptyDarts(),
     history: [],
+    legsPlayed: [],
     legs: 0,
     sets: 0,
   };
@@ -104,7 +111,12 @@ export function createPlayer(): Player {
 
 /** Clears the throwing state for the next leg, keeping the match score. */
 export function startLeg(player: Player): Player {
-  return { ...player, darts: emptyDarts(), history: [] };
+  return {
+    ...player,
+    darts: emptyDarts(),
+    history: [],
+    legsPlayed: [...player.legsPlayed, player.history],
+  };
 }
 
 /** Strips anything that is not a digit and keeps the value within 0-60. */
@@ -166,6 +178,16 @@ export function liveRemainingScore(player: Player): number {
 export function isCheckoutDouble(score: number): boolean {
   if (score === BULLSEYE) return true;
   return score >= 2 && score <= MAX_DOUBLE && score % 2 === 0;
+}
+
+/**
+ * Whether a checkout is on at all: within range of three darts, and not one of
+ * the scores in that range that no combination can finish.
+ */
+export function isCheckoutPossible(score: number): boolean {
+  return (
+    score >= 2 && score <= MAX_CHECKOUT && !BOGEY_SCORES.includes(score)
+  );
 }
 
 /**
@@ -254,4 +276,61 @@ export function findMatchWinner(
     (player) => (settings.format === "sets" ? player.sets : player.legs) >= target,
   );
   return index === -1 ? null : index;
+}
+
+/** Darts thrown in a turn. A "no score" turn is taken as a full three. */
+export function dartsThrown(turn: Turn): number {
+  if (turn.outcome === "no-score") return DARTS_PER_TURN;
+  return turn.darts.filter((dart) => dart !== "").length;
+}
+
+/** Every leg of the match, the one on the board included. */
+export function matchLegs(player: Player): Turn[][] {
+  return [...player.legsPlayed, player.history];
+}
+
+export type PlayerStats = {
+  /** Points per three darts, or null before a single dart is thrown. */
+  average: number | null;
+  /** Most points put away in one turn. */
+  bestTurn: number;
+  turns: number;
+  /** Legs finished off. */
+  checkouts: number;
+  /** Turns started on a score a checkout was actually possible from. */
+  checkoutChances: number;
+};
+
+/**
+ * Walks the match leg by leg, since a checkout chance depends on the score
+ * left at the start of each turn.
+ */
+export function playerStats(player: Player): PlayerStats {
+  const stats: PlayerStats = {
+    average: null,
+    bestTurn: 0,
+    turns: 0,
+    checkouts: 0,
+    checkoutChances: 0,
+  };
+  let points = 0;
+  let darts = 0;
+
+  for (const leg of matchLegs(player)) {
+    let remaining = STARTING_SCORE;
+    for (const turn of leg) {
+      const total = turnTotal(turn);
+
+      if (isCheckoutPossible(remaining)) stats.checkoutChances += 1;
+      if (turn.outcome === "checkout") stats.checkouts += 1;
+      stats.bestTurn = Math.max(stats.bestTurn, total);
+      stats.turns += 1;
+      points += total;
+      darts += dartsThrown(turn);
+      remaining -= total;
+    }
+  }
+
+  if (darts > 0) stats.average = (points / darts) * DARTS_PER_TURN;
+  return stats;
 }
