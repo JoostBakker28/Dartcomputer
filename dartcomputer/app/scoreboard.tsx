@@ -4,31 +4,61 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
+  LEGS_PER_SET,
+  awardLeg,
+  bestOf,
   canCheckout,
   createPlayer,
   emptyDarts,
-  findWinner,
+  findLegWinner,
+  findMatchWinner,
+  formatSummary,
   isDartComplete,
-  lastTurnPlayer,
   sanitizeDartInput,
+  startLeg,
   turnOutcome,
+  winsNeeded,
+  wonSet,
+  type MatchSettings,
   type Player,
   type TurnOutcome,
 } from "./darts";
 import PlayerPanel from "./player-panel";
 
-const createPlayers = (): Player[] => [
-  createPlayer("Player 1"),
-  createPlayer("Player 2"),
-];
+/** Everything an undo has to put back, captured before each turn is recorded. */
+type Snapshot = {
+  players: Player[];
+  activePlayer: number;
+  startingPlayer: number;
+};
 
-export default function Scoreboard() {
-  const [players, setPlayers] = useState<Player[]>(createPlayers);
+type ScoreboardProps = {
+  settings: MatchSettings;
+  names: string[];
+  onNameChange: (playerIndex: number, name: string) => void;
+  /** Back to the setup screen, keeping the names and the current rules. */
+  onNewMatch: () => void;
+};
+
+export default function Scoreboard({
+  settings,
+  names,
+  onNameChange,
+  onNewMatch,
+}: ScoreboardProps) {
+  const [players, setPlayers] = useState<Player[]>(() => [
+    createPlayer(),
+    createPlayer(),
+  ]);
   const [activePlayer, setActivePlayer] = useState(0);
+  /** Who throws first in the current leg; the two take it in turns. */
+  const [startingPlayer, setStartingPlayer] = useState(0);
+  const [past, setPast] = useState<Snapshot[]>([]);
 
   const dartRefs = useRef<(HTMLInputElement | null)[][]>([[], []]);
-  const winner = findWinner(players);
-  const undoTarget = lastTurnPlayer(players);
+  const legWinner = findLegWinner(players);
+  const matchWinner = findMatchWinner(players, settings);
+  const playingSets = settings.format === "sets";
 
   const focusDart = (playerIndex: number, dartIndex: number) => {
     dartRefs.current[playerIndex]?.[dartIndex]?.focus();
@@ -48,6 +78,11 @@ export default function Scoreboard() {
         index === playerIndex ? { ...player, ...patch } : player,
       ),
     );
+  };
+
+  /** Puts the board as it stands now on the undo stack. */
+  const rememberState = () => {
+    setPast((current) => [...current, { players, activePlayer, startingPlayer }]);
   };
 
   const handleDartChange = (
@@ -81,9 +116,12 @@ export default function Scoreboard() {
   const submitTurn = (playerIndex: number, forcedOutcome?: TurnOutcome) => {
     const player = players[playerIndex];
     const outcome = forcedOutcome ?? turnOutcome(player);
+    // "No score" throws the turn away, so whatever was typed before it was
+    // pressed is not recorded against the turn either.
     const isNoScore = outcome === "no-score";
 
-    updatePlayer(playerIndex, {
+    const recorded: Player = {
+      ...player,
       darts: emptyDarts(),
       isDouble: false,
       history: [
@@ -94,37 +132,53 @@ export default function Scoreboard() {
           outcome,
         },
       ],
-    });
+    };
+    const next = players.map((current, index) =>
+      index === playerIndex ? recorded : current,
+    );
 
-    // A checkout ends the leg, so the turn does not pass.
-    if (outcome !== "checkout") {
-      setActivePlayer((current) => (current === 0 ? 1 : 0));
+    rememberState();
+
+    // A checkout ends the leg, so the turn does not pass; it is credited.
+    if (outcome === "checkout") {
+      setPlayers(awardLeg(next, playerIndex, settings));
+      return;
     }
+
+    setPlayers(next);
+    setActivePlayer(playerIndex === 0 ? 1 : 0);
   };
 
   /**
-   * Takes back the most recent turn, whichever player threw it, and hands them
-   * the turn again with their darts back in the input fields so a mistyped
-   * score can be corrected. Pressing it repeatedly walks the whole leg back,
-   * including a checkout that was entered by mistake.
+   * Steps the whole board back to just before the last turn was recorded, so
+   * the darts are back in the fields of the player who threw them. Pressing it
+   * repeatedly walks the match back turn by turn, legs and sets included.
    */
   const undoLastTurn = () => {
-    if (undoTarget === null) return;
+    const previous = past[past.length - 1];
+    if (previous === undefined) return;
 
-    const { history } = players[undoTarget];
-    const lastTurn = history[history.length - 1];
-
-    updatePlayer(undoTarget, {
-      darts: lastTurn.darts,
-      isDouble: lastTurn.isDouble,
-      history: history.slice(0, -1),
-    });
-    setActivePlayer(undoTarget);
+    setPlayers(previous.players);
+    setActivePlayer(previous.activePlayer);
+    setStartingPlayer(previous.startingPlayer);
+    setPast((current) => current.slice(0, -1));
   };
 
-  const startNewLeg = () => {
-    setPlayers((current) => current.map((player) => createPlayer(player.name)));
+  const startNextLeg = () => {
+    rememberState();
+    setPlayers((current) => current.map(startLeg));
+    // The throw alternates from leg to leg.
+    const nextStarter = startingPlayer === 0 ? 1 : 0;
+    setStartingPlayer(nextStarter);
+    setActivePlayer(nextStarter);
+  };
+
+  /** Same rules and names, everything else back to nil. */
+  const playAgain = () => {
+    setPlayers([createPlayer(), createPlayer()]);
     setActivePlayer(0);
+    setStartingPlayer(0);
+    setPast([]);
   };
 
   const handleDartKeyDown = (
@@ -154,9 +208,11 @@ export default function Scoreboard() {
   const renderPlayer = (playerIndex: number) => (
     <PlayerPanel
       player={players[playerIndex]}
-      isActive={playerIndex === activePlayer && winner === null}
+      name={names[playerIndex]}
+      isActive={playerIndex === activePlayer && legWinner === null}
       canSubmit={players[playerIndex].darts.some((dart) => dart !== "")}
-      onNameChange={(name) => updatePlayer(playerIndex, { name })}
+      showSets={playingSets}
+      onNameChange={(name) => onNameChange(playerIndex, name)}
       onDartChange={(dartIndex, value) =>
         handleDartChange(playerIndex, dartIndex, value)
       }
@@ -172,19 +228,58 @@ export default function Scoreboard() {
     />
   );
 
+  const matchScore = playingSets
+    ? `${players[0].sets}–${players[1].sets} in sets`
+    : `${players[0].legs}–${players[1].legs} in legs`;
+
   return (
     <div className="flex w-full flex-col gap-6">
-      {winner !== null && (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          {formatSummary(settings)}
+          <span className="text-zinc-400 dark:text-zinc-500">
+            {" · "}
+            first to {winsNeeded(bestOf(settings))}
+            {playingSets ? ` · each set is best of ${LEGS_PER_SET} legs` : ""}
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={onNewMatch}
+          className="text-sm font-medium text-zinc-500 underline-offset-4 transition-colors hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-50"
+        >
+          New match
+        </button>
+      </div>
+
+      {matchWinner !== null && (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            {players[winner].name} checked out and won the leg.
+            {names[matchWinner]} won the match {matchScore}.
           </p>
           <button
             type="button"
-            onClick={startNewLeg}
+            onClick={playAgain}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
           >
-            New leg
+            Play again
+          </button>
+        </div>
+      )}
+
+      {matchWinner === null && legWinner !== null && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
+          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+            {names[legWinner]} won the{" "}
+            {wonSet(players, legWinner, settings) ? "set" : "leg"}. Match stands
+            at {matchScore}.
+          </p>
+          <button
+            type="button"
+            onClick={startNextLeg}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+          >
+            Next leg
           </button>
         </div>
       )}
@@ -197,11 +292,9 @@ export default function Scoreboard() {
           <button
             type="button"
             onClick={undoLastTurn}
-            disabled={undoTarget === null}
+            disabled={past.length === 0}
             title={
-              undoTarget === null
-                ? "No turns to undo yet"
-                : `Undo ${players[undoTarget].name}'s last turn`
+              past.length === 0 ? "Nothing to undo yet" : "Undo the last turn"
             }
             className="rounded-lg border border-zinc-300 bg-white px-5 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-transparent disabled:text-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:disabled:border-zinc-800 dark:disabled:bg-transparent dark:disabled:text-zinc-700"
           >

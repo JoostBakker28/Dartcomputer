@@ -1,4 +1,4 @@
-import Scoreboard from "./scoreboard";
+import Match from "./match";
 
 export default function Home() {
   return (
@@ -13,7 +13,7 @@ export default function Home() {
             other player.
           </p>
         </header>
-        <Scoreboard />
+        <Match />
       </main>
     </div>
   );
