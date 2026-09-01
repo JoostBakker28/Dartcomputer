@@ -2,8 +2,6 @@ import type { KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
-  MAX_CHECKOUT,
-  canCheckout,
   remainingScore,
   turnTotal,
   type Player,
@@ -32,15 +30,17 @@ const OUTCOME_BADGES: Record<
 
 type PlayerPanelProps = {
   player: Player;
+  name: string;
   isActive: boolean;
   canSubmit: boolean;
+  /** Sets are only worth showing when the match is played in them. */
+  showSets: boolean;
   onNameChange: (name: string) => void;
   onDartChange: (dartIndex: number, value: string) => void;
   onDartKeyDown: (
     dartIndex: number,
     event: KeyboardEvent<HTMLInputElement>,
   ) => void;
-  onDoubleChange: (isDouble: boolean) => void;
   onSubmitTurn: () => void;
   onNoScore: () => void;
   registerDartRef: (
@@ -51,21 +51,20 @@ type PlayerPanelProps = {
 
 export default function PlayerPanel({
   player,
+  name,
   isActive,
   canSubmit,
+  showSets,
   onNameChange,
   onDartChange,
   onDartKeyDown,
-  onDoubleChange,
   onSubmitTurn,
   onNoScore,
   registerDartRef,
 }: PlayerPanelProps) {
-  const checkoutAvailable = canCheckout(player);
-
   return (
     <section
-      aria-label={player.name}
+      aria-label={name}
       className={`flex flex-col gap-6 rounded-2xl border p-6 transition-colors ${
         isActive
           ? "border-emerald-500 bg-white shadow-lg shadow-emerald-500/10 dark:bg-zinc-900"
@@ -74,7 +73,7 @@ export default function PlayerPanel({
     >
       <header className="flex items-center justify-between gap-3">
         <input
-          value={player.name}
+          value={name}
           onChange={(event) => onNameChange(event.target.value)}
           aria-label="Player name"
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-semibold tracking-tight text-zinc-900 hover:border-zinc-300 focus:border-emerald-500 focus:outline-none dark:text-zinc-50 dark:hover:border-zinc-700"
@@ -90,9 +89,27 @@ export default function PlayerPanel({
         </span>
       </header>
 
-      <p className="text-center font-mono text-6xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-        {remainingScore(player)}
-      </p>
+      <div className="flex flex-col items-center gap-2">
+        <p className="font-mono text-6xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+          {remainingScore(player)}
+        </p>
+        <div className="flex items-center gap-4 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <span>
+            Legs{" "}
+            <span className="font-mono text-sm text-zinc-900 dark:text-zinc-50">
+              {player.legs}
+            </span>
+          </span>
+          {showSets && (
+            <span>
+              Sets{" "}
+              <span className="font-mono text-sm text-zinc-900 dark:text-zinc-50">
+                {player.sets}
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 gap-3">
         {player.darts.map((dart, dartIndex) => (
@@ -117,30 +134,6 @@ export default function PlayerPanel({
           </label>
         ))}
       </div>
-
-      {/* Sits between the darts and the actions: the checkout applies to the
-          turn as a whole, which may be fewer than three darts. */}
-      <label
-        title={
-          checkoutAvailable
-            ? "Tick if the last dart thrown this turn was a double"
-            : `Available from ${MAX_CHECKOUT} or less`
-        }
-        className={`flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm font-medium transition-colors ${
-          isActive && checkoutAvailable
-            ? "cursor-pointer border-emerald-400 text-zinc-700 dark:text-zinc-200"
-            : "border-zinc-200 text-zinc-400 dark:border-zinc-800 dark:text-zinc-600"
-        }`}
-      >
-        <input
-          type="checkbox"
-          checked={player.isDouble}
-          onChange={(event) => onDoubleChange(event.target.checked)}
-          disabled={!isActive || !checkoutAvailable}
-          className="size-4 accent-emerald-600 disabled:cursor-not-allowed"
-        />
-        Final dart double
-      </label>
 
       <div className="flex flex-col gap-2">
         <button
@@ -188,11 +181,6 @@ export default function PlayerPanel({
                         : turn.darts[dartIndex],
                     ).join("  ·  ")}
                   </span>
-                  {turn.isDouble && (
-                    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      D
-                    </span>
-                  )}
                   {badge && (
                     <span
                       className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${badge.className}`}
