@@ -1,5 +1,7 @@
 export const DARTS_PER_TURN = 3;
 export const MAX_DART_SCORE = 60;
+/** Three treble twenties: the most that can be scored in one turn. */
+export const MAXIMUM_SCORE = DARTS_PER_TURN * MAX_DART_SCORE;
 /** Scores that cannot be achieved with a single dart, so they are impossible to enter. */
 export const IMPOSSIBLE_SCORES = [59, 58, 56, 55, 53, 52, 49, 47, 46, 44, 43, 41, 37, 35, 31, 29, 23];
 export const STARTING_SCORE = 501;

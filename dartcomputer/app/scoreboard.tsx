@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   DARTS_PER_TURN,
   LEGS_PER_SET,
+  MAXIMUM_SCORE,
   awardLeg,
   bestOf,
   createPlayer,
@@ -16,14 +17,19 @@ import {
   sanitizeDartInput,
   startLeg,
   turnOutcome,
+  turnTotal,
   winsNeeded,
   wonSet,
   type MatchSettings,
   type Player,
+  type Turn,
   type TurnOutcome,
 } from "./darts";
 import MatchStats from "./match-stats";
 import PlayerPanel from "./player-panel";
+
+/** Served from public/, so the browser fetches it straight from the root. */
+const MAXIMUM_SOUND = "/180.m4a";
 
 /** Everything an undo has to put back, captured before each turn is recorded. */
 type Snapshot = {
@@ -56,12 +62,25 @@ export default function Scoreboard({
   const [past, setPast] = useState<Snapshot[]>([]);
 
   const dartRefs = useRef<(HTMLInputElement | null)[][]>([[], []]);
+  const maximumSound = useRef<HTMLAudioElement | null>(null);
   const legWinner = findLegWinner(players);
   const matchWinner = findMatchWinner(players, settings);
   const playingSets = settings.format === "sets";
 
   const focusDart = (playerIndex: number, dartIndex: number) => {
     dartRefs.current[playerIndex]?.[dartIndex]?.focus();
+  };
+
+  useEffect(() => {
+    maximumSound.current = new Audio(MAXIMUM_SOUND);
+  }, []);
+
+  const callMaximum = () => {
+    const sound = maximumSound.current;
+    if (sound === null) return;
+
+    sound.currentTime = 0;
+    void sound.play().catch(() => {});
   };
 
   // Hand focus to the first dart of whoever is up next. The turn count is a
@@ -111,21 +130,23 @@ export default function Scoreboard({
   const submitTurn = (playerIndex: number, forcedOutcome?: TurnOutcome) => {
     const player = players[playerIndex];
     const outcome = forcedOutcome ?? turnOutcome(player);
-    // "No score" throws the turn away, so whatever was typed before it was
-    // pressed is not recorded against the turn either.
     const isNoScore = outcome === "no-score";
 
+    const turn: Turn = {
+      darts: isNoScore ? emptyDarts() : player.darts,
+      outcome,
+    };
     const recorded: Player = {
       ...player,
       darts: emptyDarts(),
-      history: [
-        ...player.history,
-        { darts: isNoScore ? emptyDarts() : player.darts, outcome },
-      ],
+      history: [...player.history, turn],
     };
     const next = players.map((current, index) =>
       index === playerIndex ? recorded : current,
     );
+
+    // A busted 180 scores nothing, so it does not get the call.
+    if (turnTotal(turn) === MAXIMUM_SCORE) callMaximum();
 
     rememberState();
 
