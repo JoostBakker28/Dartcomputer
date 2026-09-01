@@ -1,14 +1,15 @@
 import type { KeyboardEvent } from "react";
 
+import { checkoutRoute } from "./checkout";
 import {
   DARTS_PER_TURN,
+  dartsEntered,
   liveRemainingScore,
   remainingScore,
   turnTotal,
   type Player,
   type TurnOutcome,
 } from "./darts";
-import { checkoutRoute } from "./checkout";
 
 /** Badge shown next to a completed turn; a plain scoring turn gets none. */
 const OUTCOME_BADGES: Record<
@@ -66,8 +67,7 @@ export default function PlayerPanel({
 }: PlayerPanelProps) {
   // The suggestion follows the turn: darts already entered count against both
   // the score left and the darts left to throw at it.
-  const dartsLeft =
-    DARTS_PER_TURN - player.darts.filter((dart) => dart !== "").length;
+  const dartsLeft = DARTS_PER_TURN - dartsEntered(player.darts);
   const checkout = checkoutRoute(liveRemainingScore(player), dartsLeft);
 
   return (

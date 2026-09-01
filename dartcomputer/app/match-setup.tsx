@@ -10,7 +10,7 @@ import {
   winsNeeded,
   type MatchFormat,
   type MatchSettings,
-} from "./darts";
+} from "./match-rules";
 
 const FORMAT_CHOICES: { value: MatchFormat; label: string; hint: string }[] = [
   { value: "legs", label: "Play legs", hint: "Straight race to the finish" },

@@ -1,4 +1,5 @@
-import { playerStats, type Player, type PlayerStats } from "./darts";
+import type { Player } from "./darts";
+import { playerStats, type PlayerStats } from "./player-stats";
 
 type StatRow = {
   label: string;

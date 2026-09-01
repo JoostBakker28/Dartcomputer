@@ -9,8 +9,7 @@ export default function Home() {
             Darts 501
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Enter each dart separately, then submit the turn to pass to the
-            other player.
+            Set the rules, then score the match dart by dart.
           </p>
         </header>
         <Match />

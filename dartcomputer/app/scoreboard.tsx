@@ -4,27 +4,31 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
-  LEGS_PER_SET,
   MAXIMUM_SCORE,
-  awardLeg,
-  bestOf,
   createPlayer,
+  dartsEntered,
   emptyDarts,
   findLegWinner,
-  findMatchWinner,
-  formatSummary,
   isDartComplete,
   sanitizeDartInput,
   startLeg,
   turnOutcome,
   turnTotal,
-  winsNeeded,
-  wonSet,
-  type MatchSettings,
   type Player,
   type Turn,
   type TurnOutcome,
 } from "./darts";
+import {
+  LEGS_PER_SET,
+  awardLeg,
+  bestOf,
+  findMatchWinner,
+  formatSummary,
+  winsNeeded,
+  wonSet,
+  type MatchSettings,
+} from "./match-rules";
+import MatchBanner from "./match-banner";
 import MatchStats from "./match-stats";
 import PlayerPanel from "./player-panel";
 
@@ -221,7 +225,7 @@ export default function Scoreboard({
       player={players[playerIndex]}
       name={names[playerIndex]}
       isActive={playerIndex === activePlayer && legWinner === null}
-      canSubmit={players[playerIndex].darts.some((dart) => dart !== "")}
+      canSubmit={dartsEntered(players[playerIndex].darts) > 0}
       showSets={playingSets}
       onNameChange={(name) => onNameChange(playerIndex, name)}
       onDartChange={(dartIndex, value) =>
@@ -262,38 +266,25 @@ export default function Scoreboard({
         </button>
       </div>
 
-      {matchWinner !== null && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            {names[matchWinner]} won the match {matchScore}.
-          </p>
-          <button
-            type="button"
-            onClick={playAgain}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-          >
-            Play again
-          </button>
-        </div>
-      )}
-
-      {matchWinner !== null && <MatchStats names={names} players={players} />}
-
-      {matchWinner === null && legWinner !== null && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500 bg-emerald-500/10 px-5 py-4">
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            {names[legWinner]} won the{" "}
-            {wonSet(players, legWinner, settings) ? "set" : "leg"}. Match stands
-            at {matchScore}.
-          </p>
-          <button
-            type="button"
-            onClick={startNextLeg}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-          >
-            Next leg
-          </button>
-        </div>
+      {matchWinner !== null ? (
+        <>
+          <MatchBanner
+            message={`${names[matchWinner]} won the match ${matchScore}.`}
+            actionLabel="Play again"
+            onAction={playAgain}
+          />
+          <MatchStats names={names} players={players} />
+        </>
+      ) : (
+        legWinner !== null && (
+          <MatchBanner
+            message={`${names[legWinner]} won the ${
+              wonSet(players, legWinner, settings) ? "set" : "leg"
+            }. Match stands at ${matchScore}.`}
+            actionLabel="Next leg"
+            onAction={startNextLeg}
+          />
+        )
       )}
 
       <div className="grid w-full gap-6 md:grid-cols-[1fr_auto_1fr]">
