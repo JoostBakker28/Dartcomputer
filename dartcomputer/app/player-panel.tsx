@@ -2,11 +2,13 @@ import type { KeyboardEvent } from "react";
 
 import {
   DARTS_PER_TURN,
+  liveRemainingScore,
   remainingScore,
   turnTotal,
   type Player,
   type TurnOutcome,
 } from "./darts";
+import { checkoutRoute } from "./checkout";
 
 /** Badge shown next to a completed turn; a plain scoring turn gets none. */
 const OUTCOME_BADGES: Record<
@@ -62,6 +64,12 @@ export default function PlayerPanel({
   onNoScore,
   registerDartRef,
 }: PlayerPanelProps) {
+  // The suggestion follows the turn: darts already entered count against both
+  // the score left and the darts left to throw at it.
+  const dartsLeft =
+    DARTS_PER_TURN - player.darts.filter((dart) => dart !== "").length;
+  const checkout = checkoutRoute(liveRemainingScore(player), dartsLeft);
+
   return (
     <section
       aria-label={name}
@@ -109,6 +117,21 @@ export default function PlayerPanel({
             </span>
           )}
         </div>
+        {checkout && (
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              Checkout
+            </span>
+            {checkout.map((dart, dartIndex) => (
+              <span
+                key={dartIndex}
+                className="rounded-md bg-emerald-500/10 px-2 py-1 font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+              >
+                {dart.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
