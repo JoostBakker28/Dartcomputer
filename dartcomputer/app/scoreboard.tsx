@@ -6,8 +6,10 @@ import {
   DARTS_PER_TURN,
   canCheckout,
   createPlayer,
+  emptyDarts,
   findWinner,
   isDartComplete,
+  lastTurnPlayer,
   sanitizeDartInput,
   turnOutcome,
   type Player,
@@ -26,15 +28,19 @@ export default function Scoreboard() {
 
   const dartRefs = useRef<(HTMLInputElement | null)[][]>([[], []]);
   const winner = findWinner(players);
+  const undoTarget = lastTurnPlayer(players);
 
   const focusDart = (playerIndex: number, dartIndex: number) => {
     dartRefs.current[playerIndex]?.[dartIndex]?.focus();
   };
 
-  // Hand focus to the first dart of whoever is up next.
+  // Hand focus to the first dart of whoever is up next. The turn count is a
+  // dependency too, so an undo that hands the turn back to the player who is
+  // already active still moves focus.
+  const activeTurnCount = players[activePlayer].history.length;
   useEffect(() => {
     focusDart(activePlayer, 0);
-  }, [activePlayer]);
+  }, [activePlayer, activeTurnCount]);
 
   const updatePlayer = (playerIndex: number, patch: Partial<Player>) => {
     setPlayers((current) =>
@@ -75,13 +81,18 @@ export default function Scoreboard() {
   const submitTurn = (playerIndex: number, forcedOutcome?: TurnOutcome) => {
     const player = players[playerIndex];
     const outcome = forcedOutcome ?? turnOutcome(player);
+    const isNoScore = outcome === "no-score";
 
     updatePlayer(playerIndex, {
-      darts: Array<string>(DARTS_PER_TURN).fill(""),
+      darts: emptyDarts(),
       isDouble: false,
       history: [
         ...player.history,
-        { darts: player.darts, isDouble: player.isDouble, outcome },
+        {
+          darts: isNoScore ? emptyDarts() : player.darts,
+          isDouble: isNoScore ? false : player.isDouble,
+          outcome,
+        },
       ],
     });
 
@@ -89,6 +100,26 @@ export default function Scoreboard() {
     if (outcome !== "checkout") {
       setActivePlayer((current) => (current === 0 ? 1 : 0));
     }
+  };
+
+  /**
+   * Takes back the most recent turn, whichever player threw it, and hands them
+   * the turn again with their darts back in the input fields so a mistyped
+   * score can be corrected. Pressing it repeatedly walks the whole leg back,
+   * including a checkout that was entered by mistake.
+   */
+  const undoLastTurn = () => {
+    if (undoTarget === null) return;
+
+    const { history } = players[undoTarget];
+    const lastTurn = history[history.length - 1];
+
+    updatePlayer(undoTarget, {
+      darts: lastTurn.darts,
+      isDouble: lastTurn.isDouble,
+      history: history.slice(0, -1),
+    });
+    setActivePlayer(undoTarget);
   };
 
   const startNewLeg = () => {
@@ -120,6 +151,27 @@ export default function Scoreboard() {
     }
   };
 
+  const renderPlayer = (playerIndex: number) => (
+    <PlayerPanel
+      player={players[playerIndex]}
+      isActive={playerIndex === activePlayer && winner === null}
+      canSubmit={players[playerIndex].darts.some((dart) => dart !== "")}
+      onNameChange={(name) => updatePlayer(playerIndex, { name })}
+      onDartChange={(dartIndex, value) =>
+        handleDartChange(playerIndex, dartIndex, value)
+      }
+      onDartKeyDown={(dartIndex, event) =>
+        handleDartKeyDown(playerIndex, dartIndex, event)
+      }
+      onDoubleChange={(isDouble) => updatePlayer(playerIndex, { isDouble })}
+      onSubmitTurn={() => submitTurn(playerIndex)}
+      onNoScore={() => submitTurn(playerIndex, "no-score")}
+      registerDartRef={(dartIndex, element) => {
+        dartRefs.current[playerIndex][dartIndex] = element;
+      }}
+    />
+  );
+
   return (
     <div className="flex w-full flex-col gap-6">
       {winner !== null && (
@@ -137,30 +189,27 @@ export default function Scoreboard() {
         </div>
       )}
 
-      <div className="grid w-full gap-6 md:grid-cols-2">
-        {players.map((player, playerIndex) => (
-          <PlayerPanel
-            key={playerIndex}
-            player={player}
-            isActive={playerIndex === activePlayer && winner === null}
-            canSubmit={player.darts.some((dart) => dart !== "")}
-            onNameChange={(name) => updatePlayer(playerIndex, { name })}
-            onDartChange={(dartIndex, value) =>
-              handleDartChange(playerIndex, dartIndex, value)
+      <div className="grid w-full gap-6 md:grid-cols-[1fr_auto_1fr]">
+        {renderPlayer(0)}
+
+        {/* Between the two panels: the undo applies to whoever threw last. */}
+        <div className="flex justify-center md:self-center">
+          <button
+            type="button"
+            onClick={undoLastTurn}
+            disabled={undoTarget === null}
+            title={
+              undoTarget === null
+                ? "No turns to undo yet"
+                : `Undo ${players[undoTarget].name}'s last turn`
             }
-            onDartKeyDown={(dartIndex, event) =>
-              handleDartKeyDown(playerIndex, dartIndex, event)
-            }
-            onDoubleChange={(isDouble) =>
-              updatePlayer(playerIndex, { isDouble })
-            }
-            onSubmitTurn={() => submitTurn(playerIndex)}
-            onNoScore={() => submitTurn(playerIndex, "no-score")}
-            registerDartRef={(dartIndex, element) => {
-              dartRefs.current[playerIndex][dartIndex] = element;
-            }}
-          />
-        ))}
+            className="rounded-lg border border-zinc-300 bg-white px-5 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-transparent disabled:text-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:disabled:border-zinc-800 dark:disabled:bg-transparent dark:disabled:text-zinc-700"
+          >
+            Undo
+          </button>
+        </div>
+
+        {renderPlayer(1)}
       </div>
     </div>
   );

@@ -37,10 +37,15 @@ export type Player = {
   history: Turn[];
 };
 
+/** A fresh set of empty darts for a turn that has not been thrown yet. */
+export function emptyDarts(): string[] {
+  return Array<string>(DARTS_PER_TURN).fill("");
+}
+
 export function createPlayer(name: string): Player {
   return {
     name,
-    darts: Array<string>(DARTS_PER_TURN).fill(""),
+    darts: emptyDarts(),
     isDouble: false,
     history: [],
   };
@@ -152,4 +157,15 @@ export function findWinner(players: Player[]): number | null {
     player.history.some((turn) => turn.outcome === "checkout"),
   );
   return index === -1 ? null : index;
+}
+
+/**
+ * Who threw the most recent completed turn, or null at the start of a leg.
+ * Turns alternate from the first player, so whoever is not a turn behind is
+ * the one who has just thrown.
+ */
+export function lastTurnPlayer(players: Player[]): number | null {
+  const [first, second] = players.map((player) => player.history.length);
+  if (first === 0 && second === 0) return null;
+  return first > second ? 0 : 1;
 }
